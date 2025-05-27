@@ -1,11 +1,11 @@
 services:
-  trending.izdrail.com:
+  git.izdrail.com:
     build:
       context: .
-    container_name: trending.izdrail.com
-    image: izdrail/trending.izdrail.com:latest
+    container_name: git.izdrail.com
+    image: izdrail/git.izdrail.com:latest
     restart: always
     ports:
-      - "1099:1099"   # Backend service port
+      - "1097:1097"   # Backend service port
     volumes:
       - .:/home/trending/
