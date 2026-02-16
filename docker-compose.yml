@@ -6,6 +6,9 @@ services:
     image: izdrail/git.izdrail.com:latest
     restart: always
     ports:
-      - "1097:1097"   # Backend service port
+      - "1097:1097" # Backend service port
     volumes:
       - .:/home/trending/
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-https://ai.izdrail.com}

@@ -8,9 +8,8 @@ LABEL maintainer="Stefan Bogdanel <stefan@izdrail.com>"
 # Install dependencies
 RUN apt update && apt install -y \
     curl \
-    mlocate \
+    plocate \
     net-tools \
-    software-properties-common \
     && apt-get clean
 
 # Install pip packages and supervisord

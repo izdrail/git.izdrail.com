@@ -5,6 +5,8 @@ A FastAPI-based REST API that automatically creates GitHub pull requests with fi
 ## 🚀 Features
 
 - **Automated PR Creation**: Creates pull requests with new file additions in a single API call
+- **AI Fix Suggestions**: Automatically generate and post fix suggestions using Ollama
+- **Issue Management**: Programmatically create GitHub issues with labels and assignees
 - **Branch Management**: Automatically creates and manages feature branches
 - **File Operations**: Handles file creation and commits via GitHub's Git API
 - **Async Operations**: Built with FastAPI for high performance async operations
@@ -81,6 +83,13 @@ A FastAPI-based REST API that automatically creates GitHub pull requests with fi
 | `GET` | `/` | Welcome page with API information |
 | `GET` | `/health` | Health check endpoint |
 | `POST` | `/create-pull-request` | Create a new pull request with file addition |
+| `POST` | `/create-issue` | Create a new GitHub issue |
+| `PATCH` | `/issues/update` | Update or close an existing issue |
+| `GET` | `/issues/list` | List issues in a repository |
+| `POST` | `/suggest-fix` | Generate and post an AI fix suggestion |
+| `POST` | `/repos/create` | Create a new repository |
+| `DELETE` | `/repos/delete` | Delete a repository |
+| `POST` | `/branches/create` | Create a new branch |
 | `GET` | `/docs` | Interactive Swagger documentation |
 | `GET` | `/redoc` | Alternative ReDoc documentation |
 
@@ -125,6 +134,69 @@ A FastAPI-based REST API that automatically creates GitHub pull requests with fi
       "sha": "def456..."
     }
   }
+}
+```
+
+### Create Issue
+
+**Endpoint:** `POST /create-issue`
+
+**Headers:**
+- `Authorization: token YOUR_GITHUB_TOKEN` (required)
+- `Content-Type: application/json`
+
+**Request Body:**
+```json
+{
+  "owner": "string",           // Repository owner (required)
+  "repo": "string",            // Repository name (required)
+  "title": "string",           // Issue title (required)
+  "body": "string",            // Issue description (optional)
+  "labels": ["string"],        // Array of label names (optional)
+  "assignees": ["string"]      // Array of GitHub usernames (optional)
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Issue created successfully",
+  "issue": {
+    "id": 987654,
+    "number": 123,
+    "title": "Found a bug in the API",
+    "html_url": "https://github.com/owner/repo/issues/123",
+    "state": "open",
+    "labels": ["bug", "high-priority"],
+    "assignees": ["developer1"]
+  }
+}
+```
+
+### Suggest Fix
+
+**Endpoint:** `POST /suggest-fix`
+
+**Headers:**
+- `Authorization: token YOUR_GITHUB_TOKEN` (required)
+- `Content-Type: application/json`
+
+**Request Body:**
+```json
+{
+  "owner": "string",           // Repository owner (required)
+  "repo": "string",            // Repository name (required)
+  "issue_number": 123,         // The issue number (required)
+  "model": "string"            // Ollama model, e.g., "mistral:7b" (default: "mistral:7b")
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Fix suggestion posted successfully",
+  "comment_url": "https://github.com/owner/repo/issues/123#issuecomment-789",
+  "suggestion": "Detailed fix suggestion in markdown..."
 }
 ```
 
@@ -232,6 +304,34 @@ curl -X POST "http://localhost:8000/create-pull-request" \
     "body": "Adds new configuration file for application settings.",
     "file_path": "config/app.yaml",
     "file_content": "app:\n  name: MyApp\n  version: 1.0.0\n  debug: false"
+  }'
+```
+
+### Example 3: Create Bug Issue
+```bash
+curl -X POST "http://localhost:8000/create-issue" \
+  -H "Authorization: token ghp_xxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "owner": "myorg",
+    "repo": "myproject",
+    "title": "Critical bug in production",
+    "body": "Users are reporting issues when logging in with social accounts.",
+    "labels": ["bug", "p0"],
+    "assignees": ["lead-dev"]
+  }'
+```
+
+### Example 4: Suggest Fix for Issue
+```bash
+curl -X POST "http://localhost:8000/suggest-fix" \
+  -H "Authorization: token ghp_xxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "owner": "myorg",
+    "repo": "myproject",
+    "issue_number": 42,
+    "model": "mistral:7b"
   }'
 ```
 

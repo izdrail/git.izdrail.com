@@ -4,6 +4,7 @@ import httpx
 import base64
 from typing import Optional
 import json
+import os
 
 app = FastAPI(title="GitHub Pull Request Creator API", version="1.0.0")
 
@@ -17,13 +18,62 @@ class PullRequestRequest(BaseModel):
     file_path: str
     file_content: str
 
-class GitHubPullRequestCreator:
-    def __init__(self, token: str):
-        self.token = token
+class IssueRequest(BaseModel):
+    owner: str
+    repo: str
+    title: str
+    body: Optional[str] = None
+    labels: Optional[list[str]] = None
+    assignees: Optional[list[str]] = None
+
+class FixSuggestionRequest(BaseModel):
+    owner: str
+    repo: str
+    issue_number: int
+    model: str = "mistral:7b"
+
+class IssueUpdate(BaseModel):
+    owner: str
+    repo: str
+    issue_number: int
+    state: Optional[str] = None  # 'open' or 'closed'
+    title: Optional[str] = None
+    body: Optional[str] = None
+    labels: Optional[list[str]] = None
+    assignees: Optional[list[str]] = None
+
+class RepoCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    private: bool = False
+    auto_init: bool = True
+
+class RepositoryRequest(BaseModel):
+    owner: str
+    repo: str
+
+class CommentRequest(BaseModel):
+    owner: str
+    repo: str
+    issue_number: int
+    body: str
+
+class BranchRequest(BaseModel):
+    owner: str
+    repo: str
+    branch: str
+    source_branch: str = "main"
+
+class GitHubAPI:
+    def __init__(self, token: Optional[str] = None):
+        self.token = token or os.getenv("GITHUB_TOKEN")
+        if not self.token:
+            raise HTTPException(status_code=401, detail="GitHub token must be provided in header or environment")
+            
         self.headers = {
-            "Authorization": f"token {token}",
+            "Authorization": f"token {self.token}",
             "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "FastAPI-GitHub-PR-Creator"
+            "User-Agent": "FastAPI-GitHub-API"
         }
         self.base_url = "https://api.github.com"
 
@@ -152,10 +202,213 @@ class GitHubPullRequestCreator:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
+    async def get_issue(self, owner: str, repo: str, issue_number: int) -> dict:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/issues/{issue_number}",
+                    headers=self.headers
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def create_comment(self, owner: str, repo: str, issue_number: int, body: str) -> dict:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/repos/{owner}/{repo}/issues/{issue_number}/comments",
+                    headers=self.headers,
+                    json={"body": body}
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def create_issue(
+        self,
+        owner: str,
+        repo: str,
+        title: str,
+        body: Optional[str] = None,
+        labels: Optional[list[str]] = None,
+        assignees: Optional[list[str]] = None
+    ) -> dict:
+        async with httpx.AsyncClient() as client:
+            try:
+                issue_data = {
+                    "title": title,
+                    "body": body,
+                    "labels": labels or [],
+                    "assignees": assignees or []
+                }
+                
+                # Remove None values
+                issue_data = {k: v for k, v in issue_data.items() if v is not None}
+                
+                response = await client.post(
+                    f"{self.base_url}/repos/{owner}/{repo}/issues",
+                    headers=self.headers,
+                    json=issue_data
+                )
+                response.raise_for_status()
+                return response.json()
+
+            except httpx.HTTPStatusError as e:
+                error_detail = f"GitHub API error: {e.response.status_code}"
+                try:
+                    error_body = e.response.json()
+                    error_detail += f" - {error_body.get('message', 'Unknown error')}"
+                except:
+                    error_detail += f" - {e.response.text}"
+                raise HTTPException(status_code=e.response.status_code, detail=error_detail)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def update_issue(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        state: Optional[str] = None,
+        title: Optional[str] = None,
+        body: Optional[str] = None,
+        labels: Optional[list[str]] = None,
+        assignees: Optional[list[str]] = None
+    ) -> dict:
+        async with httpx.AsyncClient() as client:
+            try:
+                update_data = {}
+                if state: update_data["state"] = state
+                if title: update_data["title"] = title
+                if body is not None: update_data["body"] = body
+                if labels is not None: update_data["labels"] = labels
+                if assignees is not None: update_data["assignees"] = assignees
+
+                response = await client.patch(
+                    f"{self.base_url}/repos/{owner}/{repo}/issues/{issue_number}",
+                    headers=self.headers,
+                    json=update_data
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code} - {e.response.text}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def list_issues(self, owner: str, repo: str, state: str = "open") -> list:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/issues",
+                    headers=self.headers,
+                    params={"state": state}
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def create_repository(self, name: str, description: str, private: bool, auto_init: bool) -> dict:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/user/repos",
+                    headers=self.headers,
+                    json={
+                        "name": name,
+                        "description": description,
+                        "private": private,
+                        "auto_init": auto_init
+                    }
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code} - {e.response.text}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def delete_repository(self, owner: str, repo: str) -> bool:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.delete(
+                    f"{self.base_url}/repos/{owner}/{repo}",
+                    headers=self.headers
+                )
+                response.raise_for_status()
+                return True
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def create_branch(self, owner: str, repo: str, branch: str, source_branch: str) -> dict:
+        async with httpx.AsyncClient() as client:
+            try:
+                # Get SHA of source branch
+                ref_response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/git/refs/heads/{source_branch}",
+                    headers=self.headers
+                )
+                ref_response.raise_for_status()
+                sha = ref_response.json()["object"]["sha"]
+
+                # Create new branch
+                response = await client.post(
+                    f"{self.base_url}/repos/{owner}/{repo}/git/refs",
+                    headers=self.headers,
+                    json={
+                        "ref": f"refs/heads/{branch}",
+                        "sha": sha
+                    }
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+class OllamaClient:
+    def __init__(self, base_url: Optional[str] = None):
+        self.base_url = base_url or os.getenv("OLLAMA_BASE_URL", "https://ai.izdrail.com")
+
+    async def generate_fix_suggestion(self, issue_title: str, issue_body: str, model: str) -> str:
+        prompt = f"""As an expert software engineer, please provide a concise and practical fix suggestion for the following GitHub issue.
+Title: {issue_title}
+Description: {issue_body}
+
+Provide your suggestion in markdown format. If possible, include a code snippet.
+"""
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "stream": False
+                    }
+                )
+                response.raise_for_status()
+                return response.json().get("response", "No suggestion generated.")
+            except Exception as e:
+                return f"Error generating suggestion: {str(e)}"
+
 @app.post("/create-pull-request")
 async def create_pull_request(
     request: PullRequestRequest,
-    authorization: str = Header(..., description="GitHub token (format: 'token YOUR_TOKEN')")
+    authorization: Optional[str] = Header(None, description="GitHub token (format: 'token YOUR_TOKEN')")
 ):
     """
     Create a GitHub pull request with a new file.
@@ -170,15 +423,15 @@ async def create_pull_request(
     - **file_path**: Path where the file should be created (e.g., 'articles/new-article.md')
     - **file_content**: Content of the file to be added
     """
-    # Extract token from authorization header
-    if not authorization.startswith("token "):
-        raise HTTPException(status_code=401, detail="Authorization header must start with 'token '")
+    token = None
+    if authorization:
+        if not authorization.startswith("token "):
+            raise HTTPException(status_code=401, detail="Authorization header must start with 'token '")
+        token = authorization.replace("token ", "")
     
-    token = authorization.replace("token ", "")
+    api = GitHubAPI(token)
     
-    creator = GitHubPullRequestCreator(token)
-    
-    result = await creator.create_pull_request(
+    result = await api.create_pull_request(
         owner=request.owner,
         repo=request.repo,
         base=request.base,
@@ -208,14 +461,168 @@ async def create_pull_request(
         }
     }
 
+@app.post("/create-issue")
+async def create_issue(
+    request: IssueRequest,
+    authorization: Optional[str] = Header(None, description="GitHub token (format: 'token YOUR_TOKEN')")
+):
+    """
+    Create a GitHub issue in a specified repository.
+    
+    - **authorization**: GitHub token in header (format: 'token YOUR_TOKEN')
+    - **owner**: Repository owner/organization
+    - **repo**: Repository name
+    - **title**: Issue title
+    - **body**: Issue description (optional)
+    - **labels**: List of labels to apply (optional)
+    - **assignees**: List of GitHub usernames to assign (optional)
+    """
+    token = None
+    if authorization:
+        if not authorization.startswith("token "):
+            raise HTTPException(status_code=401, detail="Authorization header must start with 'token '")
+        token = authorization.replace("token ", "")
+    
+    api = GitHubAPI(token)
+    
+    result = await api.create_issue(
+        owner=request.owner,
+        repo=request.repo,
+        title=request.title,
+        body=request.body,
+        labels=request.labels,
+        assignees=request.assignees
+    )
+    
+    return {
+        "message": "Issue created successfully",
+        "issue": {
+            "id": result["id"],
+            "number": result["number"],
+            "title": result["title"],
+            "html_url": result["html_url"],
+            "state": result["state"],
+            "labels": [label["name"] for label in result.get("labels", [])],
+            "assignees": [assignee["login"] for assignee in result.get("assignees", [])]
+        }
+    }
+
+@app.post("/suggest-fix")
+async def suggest_fix(
+    request: FixSuggestionRequest,
+    authorization: Optional[str] = Header(None, description="GitHub token (format: 'token YOUR_TOKEN')")
+):
+    """
+    Generate a fix suggestion for an issue using Ollama and post it as a comment.
+    
+    - **authorization**: GitHub token in header (format: 'token YOUR_TOKEN')
+    - **owner**: Repository owner
+    - **repo**: Repository name
+    - **issue_number**: The number of the issue to comment on
+    - **model**: Ollama model to use (default: mistral:7b)
+    """
+    token = None
+    if authorization:
+        if not authorization.startswith("token "):
+            raise HTTPException(status_code=401, detail="Authorization header must start with 'token '")
+        token = authorization.replace("token ", "")
+    
+    github_api = GitHubAPI(token)
+    ollama = OllamaClient()
+    
+    # 1) Get issue details
+    issue = await github_api.get_issue(request.owner, request.repo, request.issue_number)
+    
+    # 2) Generate suggestion
+    suggestion = await ollama.generate_fix_suggestion(
+        issue["title"],
+        issue.get("body") or "No description provided.",
+        request.model
+    )
+    
+    # 3) Post comment
+    comment_body = f"### 🤖 AI-Generated Fix Suggestion (Model: {request.model})\n\n{suggestion}"
+    result = await github_api.create_comment(request.owner, request.repo, request.issue_number, comment_body)
+    
+    return {
+        "message": "Fix suggestion posted successfully",
+        "comment_url": result["html_url"],
+        "suggestion": suggestion
+    }
+
+@app.patch("/issues/update")
+async def update_issue_endpoint(
+    request: IssueUpdate,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.update_issue(**request.dict())
+
+@app.get("/issues/list")
+async def list_issues_endpoint(
+    owner: str,
+    repo: str,
+    state: str = "open",
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.list_issues(owner, repo, state)
+
+@app.post("/repos/create")
+async def create_repo_endpoint(
+    request: RepoCreate,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.create_repository(**request.dict())
+
+@app.delete("/repos/delete")
+async def delete_repo_endpoint(
+    request: RepositoryRequest,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    success = await api.delete_repository(request.owner, request.repo)
+    return {"message": "Repository deleted successfully"} if success else {"message": "Failed to delete repository"}
+
+@app.post("/branches/create")
+async def create_branch_endpoint(
+    request: BranchRequest,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.create_branch(**request.dict())
+
 @app.get("/")
 async def root():
     """Welcome endpoint with API information."""
     return {
-        "message": "GitHub Pull Request Creator API",
-        "version": "1.0.0",
+        "message": "GitHub API Extension Service",
+        "version": "1.1.0",
         "endpoints": {
             "POST /create-pull-request": "Create a new pull request with file addition",
+            "POST /create-issue": "Create a new GitHub issue",
+            "PATCH /issues/update": "Update or close an existing issue",
+            "GET /issues/list": "List issues in a repository",
+            "POST /suggest-fix": "Generate and post an AI fix suggestion for an issue",
+            "POST /repos/create": "Create a new repository",
+            "DELETE /repos/delete": "Delete a repository",
+            "POST /branches/create": "Create a new branch",
             "GET /docs": "Interactive API documentation",
             "GET /redoc": "Alternative API documentation"
         }
