@@ -88,8 +88,15 @@ A FastAPI-based REST API that automatically creates GitHub pull requests with fi
 | `GET` | `/issues/list` | List issues in a repository |
 | `POST` | `/suggest-fix` | Generate and post an AI fix suggestion |
 | `POST` | `/repos/create` | Create a new repository |
+| `GET` | `/repos/list` | List repositories for a user or authenticated user |
+| `GET` | `/repos/get` | Get repository metadata |
 | `DELETE` | `/repos/delete` | Delete a repository |
+| `GET` | `/repos/commits` | List commits in a repository |
+| `GET` | `/repos/contents` | Get repository contents or file metadata |
 | `POST` | `/branches/create` | Create a new branch |
+| `GET` | `/branches/list` | List branches in a repository |
+| `GET` | `/pulls/list` | List pull requests in a repository |
+| `GET` | `/pulls/get` | Get pull request details |
 | `GET` | `/docs` | Interactive Swagger documentation |
 | `GET` | `/redoc` | Alternative ReDoc documentation |
 

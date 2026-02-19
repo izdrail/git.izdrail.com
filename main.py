@@ -379,6 +379,109 @@ class GitHubAPI:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
+    async def list_repositories(self, username: Optional[str] = None) -> list:
+        async with httpx.AsyncClient() as client:
+            try:
+                url = f"{self.base_url}/user/repos" if not username else f"{self.base_url}/users/{username}/repos"
+                response = await client.get(url, headers=self.headers)
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def list_branches(self, owner: str, repo: str) -> list:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/branches",
+                    headers=self.headers
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def list_pull_requests(self, owner: str, repo: str, state: str = "open") -> list:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/pulls",
+                    headers=self.headers,
+                    params={"state": state}
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def list_commits(self, owner: str, repo: str, sha: Optional[str] = None) -> list:
+        async with httpx.AsyncClient() as client:
+            try:
+                params = {}
+                if sha: params["sha"] = sha
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/commits",
+                    headers=self.headers,
+                    params=params
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def get_contents(self, owner: str, repo: str, path: str = "", ref: Optional[str] = None) -> dict:
+        async with httpx.AsyncClient() as client:
+            try:
+                params = {}
+                if ref: params["ref"] = ref
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/contents/{path}",
+                    headers=self.headers,
+                    params=params
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def get_pull_request(self, owner: str, repo: str, pull_number: int) -> dict:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/pulls/{pull_number}",
+                    headers=self.headers
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+    async def get_repository(self, owner: str, repo: str) -> dict:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}",
+                    headers=self.headers
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {e.response.status_code}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
 class OllamaClient:
     def __init__(self, base_url: Optional[str] = None):
         self.base_url = base_url or os.getenv("OLLAMA_BASE_URL", "https://ai.izdrail.com")
@@ -608,12 +711,100 @@ async def create_branch_endpoint(
     api = GitHubAPI(token)
     return await api.create_branch(**request.dict())
 
+@app.get("/repos/list")
+async def list_repos_endpoint(
+    username: Optional[str] = None,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.list_repositories(username)
+
+@app.get("/branches/list")
+async def list_branches_endpoint(
+    owner: str,
+    repo: str,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.list_branches(owner, repo)
+
+@app.get("/pulls/list")
+async def list_pulls_endpoint(
+    owner: str,
+    repo: str,
+    state: str = "open",
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.list_pull_requests(owner, repo, state)
+
+@app.get("/repos/commits")
+async def list_commits_endpoint(
+    owner: str,
+    repo: str,
+    sha: Optional[str] = None,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.list_commits(owner, repo, sha)
+
+@app.get("/repos/contents")
+async def get_contents_endpoint(
+    owner: str,
+    repo: str,
+    path: str = "",
+    ref: Optional[str] = None,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.get_contents(owner, repo, path, ref)
+
+@app.get("/repos/get")
+async def get_repo_endpoint(
+    owner: str,
+    repo: str,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.get_repository(owner, repo)
+
+@app.get("/pulls/get")
+async def get_pull_endpoint(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if authorization:
+        token = authorization.replace("token ", "") if authorization.startswith("token ") else authorization
+    api = GitHubAPI(token)
+    return await api.get_pull_request(owner, repo, pull_number)
+
 @app.get("/")
 async def root():
     """Welcome endpoint with API information."""
     return {
         "message": "GitHub API Extension Service",
-        "version": "1.1.0",
+        "version": "1.4.0",
         "endpoints": {
             "POST /create-pull-request": "Create a new pull request with file addition",
             "POST /create-issue": "Create a new GitHub issue",
@@ -621,8 +812,15 @@ async def root():
             "GET /issues/list": "List issues in a repository",
             "POST /suggest-fix": "Generate and post an AI fix suggestion for an issue",
             "POST /repos/create": "Create a new repository",
+            "GET /repos/list": "List repositories for a user or the authenticated user",
+            "GET /repos/get": "Get repository metadata",
             "DELETE /repos/delete": "Delete a repository",
+            "GET /repos/commits": "List commits in a repository",
+            "GET /repos/contents": "Get repository contents or file metadata",
             "POST /branches/create": "Create a new branch",
+            "GET /branches/list": "List branches in a repository",
+            "GET /pulls/list": "List pull requests in a repository",
+            "GET /pulls/get": "Get pull request details",
             "GET /docs": "Interactive API documentation",
             "GET /redoc": "Alternative API documentation"
         }
