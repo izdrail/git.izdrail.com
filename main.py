@@ -30,7 +30,7 @@ class FixSuggestionRequest(BaseModel):
     owner: str
     repo: str
     issue_number: int
-    model: str = "mistral:7b"
+    model: str = "hf.co/unsloth/Qwen3.5-9B-GGUF:UD-Q4_K_XL"
 
 class IssueUpdate(BaseModel):
     owner: str
@@ -622,7 +622,7 @@ async def suggest_fix(
     - **owner**: Repository owner
     - **repo**: Repository name
     - **issue_number**: The number of the issue to comment on
-    - **model**: Ollama model to use (default: mistral:7b)
+    - **model**: Ollama model to use (default: hf.co/unsloth/Qwen3.5-9B-GGUF:UD-Q4_K_XL)
     """
     token = None
     if authorization:

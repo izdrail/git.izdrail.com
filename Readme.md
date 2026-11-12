@@ -194,7 +194,7 @@ A FastAPI-based REST API that automatically creates GitHub pull requests with fi
   "owner": "string",           // Repository owner (required)
   "repo": "string",            // Repository name (required)
   "issue_number": 123,         // The issue number (required)
-  "model": "string"            // Ollama model, e.g., "mistral:7b" (default: "mistral:7b")
+  "model": "string"            // Ollama model, e.g., "hf.co/unsloth/Qwen3.5-9B-GGUF:UD-Q4_K_XL" (default: "hf.co/unsloth/Qwen3.5-9B-GGUF:UD-Q4_K_XL")
 }
 ```
 
@@ -338,7 +338,7 @@ curl -X POST "http://localhost:8000/suggest-fix" \
     "owner": "myorg",
     "repo": "myproject",
     "issue_number": 42,
-    "model": "mistral:7b"
+    "model": "hf.co/unsloth/Qwen3.5-9B-GGUF:UD-Q4_K_XL"
   }'
 ```
 
